@@ -30,7 +30,7 @@ sysdig:
 
 features:
   # Enable K8s Audit detections with Falco rules
-  k8sAuditDetections: false
+  k8sAuditDetections: true
 
   # [Admission Webhook Configuration rules](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#matching-requests-rules) for the Audit Detections
   k8sAuditDetectionsRules:  # +doc-gen:break
@@ -73,10 +73,26 @@ serviceAccounts:
     # Use this value as serviceAccount Name
     name: ""
 
+podMonitors:
+  webhook:
+    # Enable the webhook PodMonitor to scrape metrics
+    enabled: false
+    # Labels on the webhook PodMonitor
+    labels: {}
+    # Annotations on the webhook PodMonitor
+    annotations: {}
+  scanner:
+    # Enable the scanner PodMonitor to scrape metrics
+    enabled: false
+    # Labels on the scanner PodMonitor
+    labels: {}
+    # Annotatons on the scanner PodMonitor
+    annotations: {}
+
 webhook:
   # Service name for Webhook deployment
   name: webhook
-  # Amount of replicas for webhook
+  # Amount of replicas for webhook. **Deprecated**, use `webhook.autoscaling.minReplicas` and `webhook.autoscaling.maxReplicas` instead.
   replicaCount: 1
 
   image:
@@ -88,6 +104,8 @@ webhook:
     pullPolicy: IfNotPresent
     # Override the default image tag. If not specified, it defaults to appVersion in Chart.yaml
     tag:
+    # Specify the image digest value.  If set, this value is used instead of the tag value.
+    digest:
 
   service:
     # Use this type as webhook service
@@ -104,24 +122,14 @@ webhook:
   # List of hosts, IPs, or IPs in CIDR format that should not go through the proxy. We include "kubernetes" service and typical 10.0.0.0/8 services
   noProxy: kubernetes,10.0.0.0/8
 
-  # Webhook pod annotations
-  podAnnotations:  # +doc-gen:break
-    prometheus.io/scrape: "true"
-    prometheus.io/path: "/metrics"
-    prometheus.io/port: "5000"
-    prometheus.io/scheme: "https"
-    sidecar.istio.io/inject: "false"
+  # Webhook pod annotations. If empty, some annotations are automatically generated for prometheus scraping.
+  podAnnotations: {}
 
-  # PSP's for webhook
+  # Pod Security context for webhook.If empty, some security context are automatically generated.
   podSecurityContext: {}
 
-  # Configure securityContext for webhook
-  securityContext:  # +doc-gen:break
-    capabilities:
-      drop:
-      - ALL
-    readOnlyRootFilesystem: true
-    runAsNonRoot: true
+  # Configure securityContext for webhook. If empty, some security context are automatically generated.
+  securityContext: {}
 
   # Specifies if the webhook should be started in hostNetwork mode.
   # <br/>This is required if using a custom CNI where the managed control plane nodes are unable to initiate
@@ -132,13 +140,21 @@ webhook:
   # The image pull secrets for webhook
   imagePullSecrets: []
   # Resource request and limits for webhook
-  resources: {}
-#    limits:
-#      cpu: 250m
-#      memory: 256Mi
-#    requests:
-#      cpu: 250m
-#      memory: 256Mi
+  resources:  # +doc-gen:break
+    limits:
+      cpu: 250m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+  autoscaling:
+    # Min replicas to use while autoscaling the webhook
+    minReplicas: 2
+    # Max replicas to use while autoscaling the webhook
+    maxReplicas: 5
+    # Target CPU to use when the number of replicas must be increased
+    targetCPUUtilizationPercentage: 80
 
   # Number of seconds for the request to time out
   timeoutSeconds: 5
@@ -156,6 +172,8 @@ webhook:
   denyOnError: false
   # Dry Run request
   dryRun: false
+  # Log Level - Valid Values info or debug
+  logLevel: info
 
   ssl:
     ca:
@@ -186,8 +204,17 @@ webhook:
   # <br/>default: /bin/webhook --tls_cert_file /cert/tls.crt --tls_private_key_file /cert/tls.key
   customEntryPoint: []
 
+  http:
+    # HTTP serve port where the requests will be served from
+    port: 5000
+
+
+scc:
+  # Enable the creation of Security Context Constraints in Openshift
+  create: true
+
 scanner:
-  # Deploy the Inline Scanner Service
+  # If you only want the Kubernetes Audit Log functionality then disable this, and it will disable the Admission Controller Scanning Policy functionality.
   enabled: true
   # Service name for Scanner deployment
   name: scanner
@@ -203,6 +230,8 @@ scanner:
     pullPolicy: IfNotPresent
     # Scanner image tag
     tag: 0.0.10
+    # Specify the image digest value.  If set, this value is used instead of the tag value.
+    digest:
 
   service:
     # Configure port for the webhook service
